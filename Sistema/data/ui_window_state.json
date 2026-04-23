@@ -1,0 +1,32 @@
+{
+  "deposito": {
+    "width": 500,
+    "height": 656,
+    "x": 738,
+    "y": 220
+  },
+  "transferencia": {
+    "width": 500,
+    "height": 730,
+    "x": 706,
+    "y": 137
+  },
+  "tarjeta": {
+    "width": 820,
+    "height": 663,
+    "x": 574,
+    "y": 202
+  },
+  "mixto": {
+    "width": 520,
+    "height": 472,
+    "x": 696,
+    "y": 304
+  },
+  "depósito": {
+    "width": 600,
+    "height": 720,
+    "x": 660,
+    "y": 180
+  }
+}

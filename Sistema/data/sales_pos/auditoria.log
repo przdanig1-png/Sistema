@@ -1,0 +1,8 @@
+2026-04-18 22:33:15 | ADMIN | VENTA | cliente=Jesus Morales | metodo=efectivo | total=Q270.00 | corr=V-000002
+2026-04-18 22:46:37 | ADMIN | VENTA | cliente=Andres Morales | metodo=efectivo | total=Q750.00 | corr=V-000003
+2026-04-20 23:45:41 | ADMIN | VENTA | cliente=Andres Morales | metodo=efectivo | total=Q270.00 | corr=V-000003
+2026-04-21 00:17:59 | ADMIN | VENTA | cliente=Jesus Morales | metodo=credito | total=Q270.00 | corr=T-000004
+2026-04-21 00:18:31 | ADMIN | VENTA | cliente=Andres Morales | metodo=saldo_favor | total=Q270.00 | corr=T-000005
+2026-04-21 13:59:34 | ADMIN | VENTA | cliente=Jesus Morales | metodo=transferencia | total=Q135.00 | corr=T-000006
+2026-04-21 14:01:28 | ADMIN | VENTA | cliente=Jesus Morales | metodo=transferencia | total=Q270.00 | corr=T-000007
+2026-04-21 17:18:02 | ADMIN | VENTA | cliente=Jesus Morales | metodo=efectivo | total=Q135.00 | corr=T-000008

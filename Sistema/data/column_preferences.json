@@ -1,0 +1,25 @@
+{
+  "admin::inventario_listado": [
+    "code",
+    "prov_code",
+    "type",
+    "name",
+    "provider"
+  ],
+  "admin::clientes_listado": [
+    "name",
+    "phone",
+    "phone2",
+    "nit",
+    "credit",
+    "due",
+    "favor"
+  ],
+  "admin::compras_lineas": [
+    "code",
+    "item",
+    "qty",
+    "cost",
+    "total"
+  ]
+}

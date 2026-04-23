@@ -1,0 +1,19 @@
+TECNOMEDIA GT BUSINESS SUITE
+COMPROBANTE DE MOVIMIENTO DE CLIENTE
+
+No. comprobante: VOUCHER-000005
+Fecha: 20/04/2026 04:48 PM
+Tipo: ABONO A SALDO
+
+Cliente: Jesus Morales
+Código: CLI-00001
+Usuario: ADMINISTRADOR GENERAL
+
+Método: Efectivo
+Monto: Q500.00
+
+Saldo a deber: Q0.00
+Saldo a favor: Q0.00
+Saldo disponible: Q0.00
+
+Firma cliente: ________________________

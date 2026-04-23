@@ -1,0 +1,20 @@
+TECNOMEDIA GT BUSINESS SUITE
+COMPROBANTE DE MOVIMIENTO DE CLIENTE
+
+No. comprobante: TICKET-000003
+Fecha: 21/04/2026 12:03 AM
+Tipo: SALDO A FAVOR
+
+Cliente: Andres Morales
+Código: CLI-000002
+Usuario: ADMINISTRADOR GENERAL
+
+Método: Efectivo
+Monto: Q1000.00
+
+Saldo a deber: Q0.00
+Saldo a favor: Q1500.00
+Saldo disponible: Q1500.00
+
+
+Firma cliente: ________________________
