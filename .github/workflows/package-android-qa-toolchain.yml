@@ -1,0 +1,59 @@
+name: Package Android QA Toolchain
+
+on:
+  push:
+    paths:
+      - '.github/workflows/package-android-qa-toolchain.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Android QA components
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "emulator" "cmdline-tools;latest" "system-images;android-35;default;x86_64"
+          test -x "$ANDROID_SDK_ROOT/platform-tools/adb"
+          test -x "$ANDROID_SDK_ROOT/emulator/emulator"
+          test -f "$ANDROID_SDK_ROOT/system-images/android-35/default/x86_64/package.xml"
+
+      - name: Package runtime only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$ANDROID_SDK_ROOT"
+          tar -cf - \
+            platform-tools \
+            emulator \
+            cmdline-tools/latest \
+            system-images/android-35/default/x86_64 \
+            | zstd -T0 -10 -o "$RUNNER_TEMP/android-qa-sdk-api35-x86_64.tar.zst"
+          cd "$RUNNER_TEMP"
+          sha256sum android-qa-sdk-api35-x86_64.tar.zst > SHA256SUMS.txt
+          ls -lh android-qa-sdk-api35-x86_64.tar.zst
+          split -b 1800m -d -a 2 android-qa-sdk-api35-x86_64.tar.zst android-qa-sdk-api35-x86_64.tar.zst.part-
+          ls -lh android-qa-sdk-api35-x86_64.tar.zst.part-* SHA256SUMS.txt
+
+      - name: Publish temporary public toolchain release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          TAG="android-qa-toolchain-20260816"
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          gh release create "$TAG" \
+            "$RUNNER_TEMP"/android-qa-sdk-api35-x86_64.tar.zst.part-* \
+            "$RUNNER_TEMP/SHA256SUMS.txt" \
+            --title "Android QA Toolchain API 35 x86_64" \
+            --notes "Public Android SDK/emulator binaries only. No Carwash source, APK, database, credentials, or signing keys are included. Temporary bridge for local QA lab."
