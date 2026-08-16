@@ -29,7 +29,7 @@ jobs:
             'fastapi==0.115.0' \
             'uvicorn[standard]==0.30.6' \
             'python-dotenv==1.0.1' \
-            'psycopg2-binary==2.9.9' \
+            'psycopg2-binary==2.9.10' \
             'passlib==1.7.4' \
             'bcrypt==4.0.1' \
             'python-jose[cryptography]==3.3.0' \
@@ -38,6 +38,10 @@ jobs:
             'requests==2.34.2' \
             'SQLAlchemy==2.0.50' \
             'Pillow==10.4.0'
+          PYTHONPATH="$RUNNER_TEMP/python-site" python - <<'PY'
+          import psycopg2, fastapi, uvicorn, sqlalchemy
+          print('runtime imports ok', psycopg2.__version__, fastapi.__version__, sqlalchemy.__version__)
+          PY
           tar -C "$RUNNER_TEMP/python-site" -cf - . | zstd -T0 -8 -o "$RUNNER_TEMP/carwash-python313-site.tar.zst"
           sha256sum "$RUNNER_TEMP/carwash-python313-site.tar.zst" > "$RUNNER_TEMP/python.sha256"
           ls -lh "$RUNNER_TEMP/carwash-python313-site.tar.zst"
