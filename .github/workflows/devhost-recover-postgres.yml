@@ -1,0 +1,87 @@
+name: DevHost Recover PostgreSQL Lab
+
+on:
+  push:
+    paths:
+      - '.github/workflows/devhost-recover-postgres.yml'
+  workflow_dispatch:
+
+jobs:
+  recover:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    steps:
+      - name: Recover DevHost
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = 'E:\Bases\Agente GPT'
+          $agent = Join-Path $root 'DevHost\agent\devhost_agent.py'
+          $bridge = Join-Path $root 'DevHost\bridge\devhost_github_bridge.py'
+          $python = 'C:\FamilyGuardRunner\_work\_tool\Python\3.11.9\x64\python.exe'
+          $pythonw = 'C:\FamilyGuardRunner\_work\_tool\Python\3.11.9\x64\pythonw.exe'
+          $labRoot = Join-Path $root 'Workspaces\Carwash\20260816_001326_first_full_cycle\.devhost_lab\postgres'
+          if (!(Test-Path $agent) -or !(Test-Path $bridge) -or !(Test-Path $pythonw)) { throw 'DevHost runtime paths missing' }
+
+          Get-CimInstance Win32_Process | Where-Object {
+            ($_.Name -in @('initdb.exe','postgres.exe','pg_ctl.exe','createdb.exe','psql.exe')) -and
+            ($_.ExecutablePath -like 'E:\Bases\Agente GPT\Builds\Carwash\runtime\postgres16\*' -or $_.CommandLine -like '*\.devhost_lab\postgres*')
+          } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'devhost_agent\.py|devhost_github_bridge\.py' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+          Start-Sleep -Seconds 2
+
+          $text = Get-Content -LiteralPath $agent -Raw -Encoding UTF8
+          if ($text -notmatch 'def _postgres_lab_start_sync\(\):') {
+            $count = ([regex]::Matches($text, 'def postgres_lab_start\(\):')).Count
+            if ($count -ne 1) { throw "Expected one postgres_lab_start, found $count" }
+            $text = $text -replace 'def postgres_lab_start\(\):', 'def _postgres_lab_start_sync():'
+          }
+          if ($text -notmatch 'DevHostPostgresLabStart') {
+            $wrapper = @'
+def postgres_lab_start():
+    import threading, json
+    ws = ROOT / "Workspaces" / "Carwash" / "20260816_001326_first_full_cycle"
+    lab = ws / ".devhost_lab" / "postgres"
+    lab.mkdir(parents=True, exist_ok=True)
+    sf = lab / "start_status.json"
+    try:
+        cur = json.loads(sf.read_text(encoding="utf-8")) if sf.is_file() else {}
+        if cur.get("status") == "starting":
+            return cur
+    except Exception:
+        pass
+    def write(obj):
+        try:
+            sf.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    def worker():
+        write({"status": "starting"})
+        try:
+            result = _postgres_lab_start_sync()
+            write(dict(result) if isinstance(result, dict) else {"status": "ready", "result": str(result)})
+        except Exception as exc:
+            write({"status": "error", "message": str(exc)})
+    threading.Thread(target=worker, name="DevHostPostgresLabStart", daemon=True).start()
+    return {"status": "starting", "status_file": str(sf)}
+
+'@
+            $anchor = 'def postgres_lab_stop():'
+            $idx = $text.IndexOf($anchor)
+            if ($idx -lt 0) { throw 'postgres_lab_stop anchor not found' }
+            $text = $text.Insert($idx, $wrapper)
+          }
+          $statusFile = Join-Path $labRoot 'start_status.json'
+          if (Test-Path $statusFile) { Remove-Item -LiteralPath $statusFile -Force }
+          $backup = "$agent.recover_$(Get-Date -Format 'yyyyMMdd_HHmmss').bak"
+          Copy-Item $agent $backup -Force
+          Set-Content -LiteralPath $agent -Value $text -Encoding UTF8
+          & $python -m py_compile $agent
+          if ($LASTEXITCODE -ne 0) { throw 'Agent syntax check failed' }
+          Start-Process $pythonw -ArgumentList ('"' + $agent + '"') -WorkingDirectory (Split-Path $agent) -WindowStyle Hidden
+          Start-Sleep -Seconds 2
+          Start-Process $pythonw -ArgumentList ('"' + $bridge + '"') -WorkingDirectory (Split-Path $bridge) -WindowStyle Hidden
+          Start-Sleep -Seconds 5
+          $procs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'devhost_agent\.py|devhost_github_bridge\.py' }
+          if (($procs | Measure-Object).Count -lt 2) { throw 'DevHost processes did not restart' }
+          $procs | Select-Object ProcessId,Name,CommandLine | Format-List
