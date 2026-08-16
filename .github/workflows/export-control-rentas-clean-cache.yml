@@ -1,0 +1,215 @@
+name: Export Control Rentas Clean Offline Cache
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-control-rentas-clean-cache.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: export-control-rentas-clean-cache
+  cancel-in-progress: true
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter 3.41.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+
+      - name: Prepare exact Android native toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+            'platform-tools' \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;28.2.13676358' \
+            'cmake;3.22.1'
+          flutter precache --android
+          test -d "$SDK_ROOT/ndk/28.2.13676358"
+          test -d "$SDK_ROOT/cmake/3.22.1"
+
+      - name: Build dependency seed using isolated caches
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CLEAN_GRADLE="$RUNNER_TEMP/control-rentas-gradle-home"
+          CLEAN_PUB="$RUNNER_TEMP/control-rentas-pub-cache"
+          mkdir -p "$CLEAN_GRADLE" "$CLEAN_PUB"
+          echo "CLEAN_GRADLE=$CLEAN_GRADLE" >> "$GITHUB_ENV"
+          echo "CLEAN_PUB=$CLEAN_PUB" >> "$GITHUB_ENV"
+
+          flutter create --platforms=android --org com.example seed
+          cd seed
+          cat > pubspec.yaml <<'PUBSPEC'
+          name: control_rentas_seed
+          description: Offline dependency seed for Control Rentas v419
+          publish_to: 'none'
+          version: 0.5.110+419
+          environment:
+            sdk: '>=3.11.0 <4.0.0'
+          dependencies:
+            flutter:
+              sdk: flutter
+            cupertino_icons: ^1.0.8
+            shared_preferences: ^2.2.3
+            intl: ^0.19.0
+            image_picker: ^1.1.2
+            image: ^4.8.0
+            share_plus: ^10.1.4
+            path_provider: ^2.1.4
+            pdf: ^3.11.1
+            url_launcher: ^6.3.0
+            file_picker: ^8.0.7
+            archive: ^4.0.9
+            local_auth: ^2.3.0
+            firebase_core: ^3.6.0
+            firebase_messaging: ^15.1.3
+            cloud_firestore: ^5.6.12
+            flutter_local_notifications: ^17.2.3
+            timezone: ^0.9.4
+            permission_handler: ^11.3.1
+            audioplayers: ^6.1.0
+            workmanager: 0.9.0+3
+          dev_dependencies:
+            flutter_lints: ^5.0.0
+          flutter:
+            uses-material-design: true
+          PUBSPEC
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('android/settings.gradle.kts')
+          t=s.read_text()
+          t=re.sub(r'id\("com\.android\.application"\) version "[^"]+" apply false', 'id("com.android.application") version "8.11.1" apply false', t)
+          t=re.sub(r'id\("org\.jetbrains\.kotlin\.android"\) version "[^"]+" apply false', 'id("org.jetbrains.kotlin.android") version "2.2.20" apply false', t)
+          if 'com.google.gms.google-services' not in t:
+              t=t.replace('plugins {', 'plugins {\n    id("com.google.gms.google-services") version "4.4.3" apply false', 1)
+          s.write_text(t)
+
+          w=Path('android/gradle/wrapper/gradle-wrapper.properties')
+          wt=w.read_text()
+          wt=re.sub(r'gradle-[^/]+-(?:all|bin)\.zip', 'gradle-8.14-all.zip', wt)
+          w.write_text(wt)
+
+          a=Path('android/app/build.gradle.kts')
+          at=a.read_text()
+          at=at.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
+          at=at.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 36')
+          at=at.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true')
+          at += '''\n\ndependencies {\n    implementation(platform("com.google.firebase:firebase-bom:33.16.0"))\n    implementation("com.google.firebase:firebase-messaging")\n    implementation("androidx.core:core:1.15.0")\n    implementation("androidx.core:core-ktx:1.15.0")\n    implementation("androidx.activity:activity:1.10.1")\n    implementation("androidx.activity:activity-ktx:1.10.1")\n    implementation("androidx.browser:browser:1.8.0")\n    implementation("androidx.navigationevent:navigationevent-android:1.0.0")\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'''
+          a.write_text(at)
+          PY
+
+          PUB_CACHE="$CLEAN_PUB" GRADLE_USER_HOME="$CLEAN_GRADLE" flutter pub get
+          PUB_CACHE="$CLEAN_PUB" GRADLE_USER_HOME="$CLEAN_GRADLE" flutter build apk --debug
+          test -f build/app/outputs/flutter-apk/app-debug.apk
+          GRADLE_USER_HOME="$CLEAN_GRADLE" ./android/gradlew -p android --version | grep -F 'Gradle 8.14'
+
+      - name: Prove isolated caches work offline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd seed
+          rm -rf .dart_tool build android/.gradle
+          PUB_CACHE="$CLEAN_PUB" flutter pub get --offline
+          PUB_CACHE="$CLEAN_PUB" \
+          GRADLE_USER_HOME="$CLEAN_GRADLE" \
+          GRADLE_OPTS='-Dorg.gradle.offline=true' \
+          flutter build apk --debug
+          test -f build/app/outputs/flutter-apk/app-debug.apk
+
+      - name: Package clean Dart and Gradle caches
+        shell: bash
+        run: |
+          set -euxo pipefail
+          STAGE="$RUNNER_TEMP/control-rentas-clean-caches"
+          mkdir -p "$STAGE/home"
+          cp -a "$CLEAN_PUB" "$STAGE/home/pub-cache"
+          cp -a "$CLEAN_GRADLE" "$STAGE/home/gradle"
+          tar --use-compress-program='zstd -T0 -6' -cf "$RUNNER_TEMP/control-rentas-v419-clean-caches.tar.zst" -C "$STAGE" .
+          cd "$RUNNER_TEMP"
+          sha256sum control-rentas-v419-clean-caches.tar.zst > clean-caches-SHA256SUMS.txt
+          split -b 350m -d -a 2 control-rentas-v419-clean-caches.tar.zst clean-caches.part-
+          ls -lh clean-caches.part-* clean-caches-SHA256SUMS.txt
+
+      - name: Package NDK and CMake supplement
+        shell: bash
+        run: |
+          set -euxo pipefail
+          STAGE="$RUNNER_TEMP/control-rentas-native-supplement"
+          mkdir -p "$STAGE/ndk" "$STAGE/cmake"
+          cp -a "$ANDROID_SDK_ROOT/ndk/28.2.13676358" "$STAGE/ndk/28.2.13676358"
+          cp -a "$ANDROID_SDK_ROOT/cmake/3.22.1" "$STAGE/cmake/3.22.1"
+          tar --use-compress-program='zstd -T0 -6' -cf "$RUNNER_TEMP/control-rentas-native-supplement.tar.zst" -C "$STAGE" .
+          cd "$RUNNER_TEMP"
+          sha256sum control-rentas-native-supplement.tar.zst > native-SHA256SUMS.txt
+          split -b 350m -d -a 2 control-rentas-native-supplement.tar.zst native.part-
+          ls -lh native.part-* native-SHA256SUMS.txt
+
+      - name: Upload cache metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-rentas-clean-caches-meta
+          path: ${{ runner.temp }}/clean-caches-SHA256SUMS.txt
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload clean cache part 00
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-caches-part00, path: '${{ runner.temp }}/clean-caches.part-00', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload clean cache part 01
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-caches-part01, path: '${{ runner.temp }}/clean-caches.part-01', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload clean cache part 02
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-caches-part02, path: '${{ runner.temp }}/clean-caches.part-02', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload clean cache part 03
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-caches-part03, path: '${{ runner.temp }}/clean-caches.part-03', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+
+      - name: Upload native metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-rentas-native-meta
+          path: ${{ runner.temp }}/native-SHA256SUMS.txt
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload native part 00
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-native-part00, path: '${{ runner.temp }}/native.part-00', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload native part 01
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-native-part01, path: '${{ runner.temp }}/native.part-01', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload native part 02
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-native-part02, path: '${{ runner.temp }}/native.part-02', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload native part 03
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-native-part03, path: '${{ runner.temp }}/native.part-03', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
