@@ -1,0 +1,83 @@
+name: Export FamilyGuard missing public Maven dependencies
+
+on:
+  push:
+    branches:
+      - temp-android-sdk-bootstrap-20260815
+    paths:
+      - 'familyguard-bootstrap/export-missing-maven.json'
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Resolve exact public dependencies and build Maven layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/fg-missing-warm"
+          GH="$RUNNER_TEMP/fg-missing-gradle"
+          OUT="$GITHUB_WORKSPACE/local-maven"
+          rm -rf "$WORK" "$GH" "$OUT"
+          mkdir -p "$WORK" "$GH" "$OUT"
+          cd "$WORK"
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='fg-missing-warm'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins { id 'base' }
+          configurations { warm }
+          dependencies {
+            warm 'androidx.core:core:1.13.1'
+            warm 'androidx.core:core-ktx:1.13.1'
+            warm 'com.google.mlkit:vision-common:17.2.0'
+            warm 'com.google.mlkit:common:18.5.0'
+            warm 'com.google.mlkit:vision-interfaces:16.1.0'
+            warm 'com.google.errorprone:error_prone_annotations:2.15.0'
+            warm platform('org.jetbrains.kotlin:kotlin-bom:2.0.21')
+            warm 'org.jetbrains.kotlin:kotlin-stdlib:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-stdlib-common:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-reflect:2.0.21'
+          }
+          tasks.register('warmDependencies') { doLast { configurations.warm.files.each { println it } } }
+          EOF
+          GRADLE_USER_HOME="$GH" gradle warmDependencies --no-daemon --stacktrace
+
+          BASE="$GH/caches/modules-2/files-2.1"
+          for GROUP in androidx.core com.google.mlkit com.google.errorprone org.jetbrains.kotlin; do
+            GPATH="${GROUP//./\/}"
+            SRC="$BASE/$GROUP"
+            [ -d "$SRC" ] || continue
+            find "$SRC" -mindepth 2 -maxdepth 2 -type d | while read -r VERPATH; do
+              MODPATH="$(dirname "$VERPATH")"
+              MOD="$(basename "$MODPATH")"
+              VER="$(basename "$VERPATH")"
+              DEST="$OUT/$GPATH/$MOD/$VER"
+              mkdir -p "$DEST"
+              find "$VERPATH" -type f \( -name '*.pom' -o -name '*.jar' -o -name '*.aar' -o -name '*.module' \) -exec cp -f {} "$DEST/" \;
+            done
+          done
+          find "$OUT" -type f -printf '%P %s\n' | sort
+          tar -C "$OUT" -czf "$GITHUB_WORKSPACE/familyguard-missing-public-local-maven.tar.gz" .
+          sha256sum "$GITHUB_WORKSPACE/familyguard-missing-public-local-maven.tar.gz" > "$GITHUB_WORKSPACE/familyguard-missing-public-local-maven.tar.gz.sha256"
+
+      - name: Upload local Maven package
+        uses: actions/upload-artifact@v4
+        with:
+          name: familyguard-missing-public-local-maven
+          path: |
+            familyguard-missing-public-local-maven.tar.gz
+            familyguard-missing-public-local-maven.tar.gz.sha256
+          compression-level: 0
+          retention-days: 1
