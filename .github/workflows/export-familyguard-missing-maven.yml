@@ -18,12 +18,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Resolve exact public dependencies and build Maven layout
+      - name: Resolve exact AndroidX artifacts
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/fg-missing-warm"
-          GH="$RUNNER_TEMP/fg-missing-gradle"
+          WORK="$RUNNER_TEMP/fg-exact-warm"
+          GH="$RUNNER_TEMP/fg-exact-gradle"
           OUT="$GITHUB_WORKSPACE/local-maven"
           rm -rf "$WORK" "$GH" "$OUT"
           mkdir -p "$WORK" "$GH" "$OUT"
@@ -31,56 +31,48 @@ jobs:
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name='fg-missing-warm'
+          rootProject.name='fg-exact-warm'
           EOF
           cat > build.gradle <<'EOF'
           plugins { id 'base' }
-          configurations { warm }
-          dependencies {
-            warm 'androidx.core:core:1.13.1'
-            warm 'androidx.core:core:1.15.0'
-            warm 'androidx.core:core-ktx:1.2.0'
-            warm 'androidx.core:core-ktx:1.13.1'
-            warm 'com.google.mlkit:vision-common:17.2.0'
-            warm 'com.google.mlkit:common:18.5.0'
-            warm 'com.google.mlkit:vision-interfaces:16.1.0'
-            warm 'com.google.errorprone:error_prone_annotations:2.15.0'
-            warm platform('org.jetbrains.kotlin:kotlin-bom:2.0.21')
-            warm 'org.jetbrains.kotlin:kotlin-stdlib:2.0.21'
-            warm 'org.jetbrains.kotlin:kotlin-stdlib-common:2.0.21'
-            warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21'
-            warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21'
-            warm 'org.jetbrains.kotlin:kotlin-reflect:2.0.21'
-            warm 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.0.21'
+          configurations {
+            exactCore130 { transitive = false }
+            exactCoreKtx120 { transitive = false }
           }
-          tasks.register('warmDependencies') { doLast { configurations.warm.files.each { println it } } }
+          dependencies {
+            exactCore130 'androidx.core:core:1.13.0'
+            exactCoreKtx120 'androidx.core:core-ktx:1.2.0'
+          }
+          tasks.register('warmExact') {
+            doLast {
+              configurations.exactCore130.files.each { println it }
+              configurations.exactCoreKtx120.files.each { println it }
+            }
+          }
           EOF
-          GRADLE_USER_HOME="$GH" gradle warmDependencies --no-daemon --stacktrace
+          GRADLE_USER_HOME="$GH" gradle warmExact --no-daemon --stacktrace
 
-          BASE="$GH/caches/modules-2/files-2.1"
-          for GROUP in androidx.core com.google.mlkit com.google.errorprone org.jetbrains.kotlin org.jetbrains.intellij.deps org.jetbrains; do
-            GPATH="${GROUP//./\/}"
-            SRC="$BASE/$GROUP"
+          BASE="$GH/caches/modules-2/files-2.1/androidx.core"
+          for MOD in core core-ktx; do
+            SRC="$BASE/$MOD"
             [ -d "$SRC" ] || continue
-            find "$SRC" -mindepth 2 -maxdepth 2 -type d | while read -r VERPATH; do
-              MODPATH="$(dirname "$VERPATH")"
-              MOD="$(basename "$MODPATH")"
+            find "$SRC" -mindepth 1 -maxdepth 1 -type d | while read -r VERPATH; do
               VER="$(basename "$VERPATH")"
-              DEST="$OUT/$GPATH/$MOD/$VER"
+              DEST="$OUT/androidx/core/$MOD/$VER"
               mkdir -p "$DEST"
               find "$VERPATH" -type f \( -name '*.pom' -o -name '*.jar' -o -name '*.aar' -o -name '*.module' \) -exec cp -f {} "$DEST/" \;
             done
           done
           find "$OUT" -type f -printf '%P %s\n' | sort
-          tar -C "$OUT" -czf "$GITHUB_WORKSPACE/familyguard-missing-public-local-maven.tar.gz" .
-          sha256sum "$GITHUB_WORKSPACE/familyguard-missing-public-local-maven.tar.gz" > "$GITHUB_WORKSPACE/familyguard-missing-public-local-maven.tar.gz.sha256"
+          tar -C "$OUT" -czf "$GITHUB_WORKSPACE/familyguard-exact-androidx-local-maven.tar.gz" .
+          sha256sum "$GITHUB_WORKSPACE/familyguard-exact-androidx-local-maven.tar.gz" > "$GITHUB_WORKSPACE/familyguard-exact-androidx-local-maven.tar.gz.sha256"
 
-      - name: Upload local Maven package
+      - name: Upload exact AndroidX package
         uses: actions/upload-artifact@v4
         with:
-          name: familyguard-missing-public-local-maven
+          name: familyguard-exact-androidx-local-maven
           path: |
-            familyguard-missing-public-local-maven.tar.gz
-            familyguard-missing-public-local-maven.tar.gz.sha256
+            familyguard-exact-androidx-local-maven.tar.gz
+            familyguard-exact-androidx-local-maven.tar.gz.sha256
           compression-level: 0
           retention-days: 1
