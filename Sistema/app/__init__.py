@@ -1,1 +1,0 @@
-# TECNOMEDIA GT Business Suite

@@ -1,1 +1,0 @@
-La base operativa principal es SQLite. Este directorio solo conserva archivos auxiliares cuando el sistema lo necesite.

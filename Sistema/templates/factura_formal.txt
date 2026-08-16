@@ -1,1 +1,0 @@
-Formato factura profesional con logo, datos, tabla completa y totales.
