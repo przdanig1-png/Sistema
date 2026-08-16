@@ -38,6 +38,8 @@ jobs:
           configurations { warm }
           dependencies {
             warm 'androidx.core:core:1.13.1'
+            warm 'androidx.core:core:1.15.0'
+            warm 'androidx.core:core-ktx:1.2.0'
             warm 'androidx.core:core-ktx:1.13.1'
             warm 'com.google.mlkit:vision-common:17.2.0'
             warm 'com.google.mlkit:common:18.5.0'
