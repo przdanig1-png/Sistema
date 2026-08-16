@@ -49,13 +49,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-16 postgresql-client-16
           PGROOT=/usr/lib/postgresql/16
+          PGSHARE=/usr/share/postgresql/16
           test -x "$PGROOT/bin/postgres"
+          test -f "$PGSHARE/postgres.bki"
           OUT="$RUNNER_TEMP/postgres16-portable"
           mkdir -p "$OUT/bin" "$OUT/lib" "$OUT/share"
           cp -a "$PGROOT/bin/." "$OUT/bin/"
           cp -a "$PGROOT/lib/." "$OUT/lib/" || true
-          cp -a "$PGROOT/share/." "$OUT/share/" || true
-          # Bundle non-glibc shared-library dependencies so the runtime is self-contained.
+          cp -a "$PGSHARE/." "$OUT/share/"
           for exe in "$PGROOT/bin/postgres" "$PGROOT/bin/initdb" "$PGROOT/bin/psql" "$PGROOT/bin/pg_ctl"; do
             ldd "$exe" | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if($i ~ /^\//) print $i}'
           done | sort -u > "$RUNNER_TEMP/pg-libs.txt"
