@@ -40,9 +40,7 @@ jobs:
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           test -d "$SDK_ROOT"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -perm -111 | head -1)
-          fi
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -perm -111 | head -1); fi
           test -n "$SDKMANAGER"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
@@ -50,7 +48,6 @@ jobs:
           "$SDKMANAGER" --sdk_root="$SDK_ROOT" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'cmdline-tools;latest'
           flutter precache --android
           flutter --version
-          java -version
           test -d "$SDK_ROOT/platforms/android-36"
           test -d "$SDK_ROOT/build-tools/36.0.0"
 
@@ -70,16 +67,18 @@ jobs:
           cd ..
           test -f src/build/app/outputs/flutter-apk/app-debug.apk
 
-      - name: Package Flutter SDK
+      - name: Package and split Flutter SDK
         shell: bash
         run: |
           set -euxo pipefail
           FLUTTER_BIN=$(command -v flutter)
           FLUTTER_ROOT=$(cd "$(dirname "$FLUTTER_BIN")/.." && pwd)
-          echo "$FLUTTER_ROOT" > flutter-root.txt
-          tar --use-compress-program='zstd -T0 -3' -cf flutter-3.41.9-linux.tar.zst -C "$(dirname "$FLUTTER_ROOT")" "$(basename "$FLUTTER_ROOT")"
-          sha256sum flutter-3.41.9-linux.tar.zst > flutter-3.41.9-linux.tar.zst.sha256
-          ls -lh flutter-3.41.9-linux.tar.zst
+          echo "$FLUTTER_ROOT" > "$RUNNER_TEMP/flutter-root.txt"
+          tar --use-compress-program='zstd -T0 -3' -cf "$RUNNER_TEMP/flutter-3.41.9-linux.tar.zst" -C "$(dirname "$FLUTTER_ROOT")" "$(basename "$FLUTTER_ROOT")"
+          cd "$RUNNER_TEMP"
+          sha256sum flutter-3.41.9-linux.tar.zst > flutter-SHA256SUMS.txt
+          split -b 400m -d -a 2 flutter-3.41.9-linux.tar.zst flutter-sdk.part-
+          ls -lh flutter-sdk.part-* flutter-SHA256SUMS.txt
 
       - name: Package Android SDK minimum
         shell: bash
@@ -91,11 +90,12 @@ jobs:
             mkdir -p "$STAGE/$(dirname "$d")"
             cp -a "$ANDROID_SDK_ROOT/$d" "$STAGE/$d"
           done
-          tar --use-compress-program='zstd -T0 -3' -cf android-sdk-api36-min.tar.zst -C "$STAGE" .
-          sha256sum android-sdk-api36-min.tar.zst > android-sdk-api36-min.tar.zst.sha256
-          ls -lh android-sdk-api36-min.tar.zst
+          tar --use-compress-program='zstd -T0 -3' -cf "$RUNNER_TEMP/android-sdk-api36-min.tar.zst" -C "$STAGE" .
+          cd "$RUNNER_TEMP"
+          sha256sum android-sdk-api36-min.tar.zst > android-SHA256SUMS.txt
+          ls -lh android-sdk-api36-min.tar.zst android-SHA256SUMS.txt
 
-      - name: Package offline caches
+      - name: Package and split offline caches
         shell: bash
         run: |
           set -euxo pipefail
@@ -103,40 +103,80 @@ jobs:
           mkdir -p "$STAGE/home"
           if [ -d "$HOME/.pub-cache" ]; then cp -a "$HOME/.pub-cache" "$STAGE/home/pub-cache"; fi
           if [ -d "$HOME/.gradle" ]; then cp -a "$HOME/.gradle" "$STAGE/home/gradle"; fi
-          tar --use-compress-program='zstd -T0 -3' -cf control-rentas-v419-offline-caches.tar.zst -C "$STAGE" .
-          sha256sum control-rentas-v419-offline-caches.tar.zst > control-rentas-v419-offline-caches.tar.zst.sha256
-          ls -lh control-rentas-v419-offline-caches.tar.zst
+          tar --use-compress-program='zstd -T0 -3' -cf "$RUNNER_TEMP/control-rentas-v419-offline-caches.tar.zst" -C "$STAGE" .
+          cd "$RUNNER_TEMP"
+          sha256sum control-rentas-v419-offline-caches.tar.zst > caches-SHA256SUMS.txt
+          split -b 400m -d -a 2 control-rentas-v419-offline-caches.tar.zst caches.part-
+          ls -lh caches.part-* caches-SHA256SUMS.txt
 
-      - name: Upload Flutter SDK
+      - name: Upload Flutter metadata
         uses: actions/upload-artifact@v4
         with:
-          name: control-rentas-flutter-3.41.9
+          name: control-rentas-flutter-meta
           path: |
-            flutter-3.41.9-linux.tar.zst
-            flutter-3.41.9-linux.tar.zst.sha256
-            flutter-root.txt
-          compression-level: 0
+            ${{ runner.temp }}/flutter-SHA256SUMS.txt
+            ${{ runner.temp }}/flutter-root.txt
           retention-days: 1
           if-no-files-found: error
 
-      - name: Upload Android SDK
+      - name: Upload Flutter part 00
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part00, path: '${{ runner.temp }}/flutter-sdk.part-00', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload Flutter part 01
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part01, path: '${{ runner.temp }}/flutter-sdk.part-01', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload Flutter part 02
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part02, path: '${{ runner.temp }}/flutter-sdk.part-02', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload Flutter part 03
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part03, path: '${{ runner.temp }}/flutter-sdk.part-03', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload Flutter part 04
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part04, path: '${{ runner.temp }}/flutter-sdk.part-04', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload Flutter part 05
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part05, path: '${{ runner.temp }}/flutter-sdk.part-05', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload Flutter part 06
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part06, path: '${{ runner.temp }}/flutter-sdk.part-06', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload Flutter part 07
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-flutter-part07, path: '${{ runner.temp }}/flutter-sdk.part-07', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+
+      - name: Upload Android API36 SDK
         uses: actions/upload-artifact@v4
         with:
           name: control-rentas-android-sdk-api36
           path: |
-            android-sdk-api36-min.tar.zst
-            android-sdk-api36-min.tar.zst.sha256
+            ${{ runner.temp }}/android-sdk-api36-min.tar.zst
+            ${{ runner.temp }}/android-SHA256SUMS.txt
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
 
-      - name: Upload offline caches
+      - name: Upload cache metadata
         uses: actions/upload-artifact@v4
         with:
-          name: control-rentas-v419-offline-caches
-          path: |
-            control-rentas-v419-offline-caches.tar.zst
-            control-rentas-v419-offline-caches.tar.zst.sha256
-          compression-level: 0
+          name: control-rentas-caches-meta
+          path: ${{ runner.temp }}/caches-SHA256SUMS.txt
           retention-days: 1
           if-no-files-found: error
+      - name: Upload caches part 00
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-caches-part00, path: '${{ runner.temp }}/caches.part-00', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload caches part 01
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-caches-part01, path: '${{ runner.temp }}/caches.part-01', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload caches part 02
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-caches-part02, path: '${{ runner.temp }}/caches.part-02', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload caches part 03
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-caches-part03, path: '${{ runner.temp }}/caches.part-03', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload caches part 04
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-caches-part04, path: '${{ runner.temp }}/caches.part-04', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
+      - name: Upload caches part 05
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-caches-part05, path: '${{ runner.temp }}/caches.part-05', compression-level: 0, retention-days: 1, if-no-files-found: ignore}
