@@ -1,0 +1,77 @@
+name: Split Carwash Flutter 3.47 Cache
+
+on:
+  push:
+    paths:
+      - '.github/workflows/split-carwash-flutter347-cache.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download verified full cache artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          curl -fL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/9258354971/zip" \
+            -o "$RUNNER_TEMP/full.zip"
+          mkdir -p "$RUNNER_TEMP/full"
+          unzip -q "$RUNNER_TEMP/full.zip" -d "$RUNNER_TEMP/full"
+          ls -lh "$RUNNER_TEMP/full"
+          test -f "$RUNNER_TEMP/full/carwash-flutter347-gradle814-full.tar.zst"
+          test -f "$RUNNER_TEMP/full/carwash-flutter347-gradle814-full.sha256"
+          expected=$(awk '{print $1}' "$RUNNER_TEMP/full/carwash-flutter347-gradle814-full.sha256")
+          actual=$(sha256sum "$RUNNER_TEMP/full/carwash-flutter347-gradle814-full.tar.zst" | awk '{print $1}')
+          test "$actual" = "$expected"
+          echo "$actual  carwash-flutter347-gradle814-full.tar.zst" > "$RUNNER_TEMP/cache.sha256"
+
+      - name: Split cache into connector-safe pieces
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP"
+          split -b 300m -d -a 2 full/carwash-flutter347-gradle814-full.tar.zst cache.part-
+          test -f cache.part-00
+          test -f cache.part-01
+          ls -lh cache.part-* cache.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carwash-cache-part00
+          path: ${{ runner.temp }}/cache.part-00
+          compression-level: 0
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carwash-cache-part01
+          path: ${{ runner.temp }}/cache.part-01
+          compression-level: 0
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carwash-cache-part02
+          path: ${{ runner.temp }}/cache.part-02
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carwash-cache-sha
+          path: ${{ runner.temp }}/cache.sha256
+          compression-level: 0
+          retention-days: 1
