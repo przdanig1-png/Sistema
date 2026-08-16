@@ -1,4 +1,4 @@
-name: Export FamilyGuard Android 34 tools and exact offline cache
+name: Export FamilyGuard Kids Kotlin 2.0.21 local Maven dependencies
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  export-missing-local-lab-bits:
+  export-kids-kotlin:
     runs-on: ubuntu-latest
     steps:
       - name: Java 21
@@ -16,64 +16,59 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Android 34 platform and build tools
+      - name: Resolve Kotlin 2.0.21 family and build local Maven layout
         shell: bash
         run: |
           set -euo pipefail
-          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-          mkdir -p sdk34/platforms sdk34/build-tools
-          cp -a "$ANDROID_SDK_ROOT/platforms/android-34" sdk34/platforms/
-          cp -a "$ANDROID_SDK_ROOT/build-tools/34.0.0" sdk34/build-tools/
-          tar -C sdk34 -czf familyguard-android34-tools.tar.gz .
-          sha256sum familyguard-android34-tools.tar.gz > familyguard-android34-tools.tar.gz.sha256
-          ls -lh familyguard-android34-tools.tar.gz
-
-      - name: Warm exact error-prone annotations 2.15.0 cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          WORK="$RUNNER_TEMP/fg-errorprone-warm"
-          GH="$RUNNER_TEMP/fg-errorprone-gradle-home"
-          rm -rf "$WORK" "$GH"
-          mkdir -p "$WORK" "$GH"
+          WORK="$RUNNER_TEMP/fg-kotlin-warm"
+          GH="$RUNNER_TEMP/fg-kotlin-gradle-home"
+          OUT="$GITHUB_WORKSPACE/kotlin-maven"
+          rm -rf "$WORK" "$GH" "$OUT"
+          mkdir -p "$WORK" "$GH" "$OUT"
           cd "$WORK"
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name='fg-errorprone-warm'
+          rootProject.name='fg-kotlin-warm'
           EOF
           cat > build.gradle <<'EOF'
           plugins { id 'base' }
           configurations { warm }
-          dependencies { warm 'com.google.errorprone:error_prone_annotations:2.15.0' }
+          dependencies {
+            warm platform('org.jetbrains.kotlin:kotlin-bom:2.0.21')
+            warm 'org.jetbrains.kotlin:kotlin-stdlib:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-stdlib-common:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-reflect:2.0.21'
+          }
           tasks.register('warmDependencies') { doLast { configurations.warm.files.each { println it } } }
           EOF
           GRADLE_USER_HOME="$GH" gradle warmDependencies --no-daemon --stacktrace
-          mkdir -p "$RUNNER_TEMP/export-cache"
-          cp -a "$GH/caches/modules-2" "$RUNNER_TEMP/export-cache/"
-          tar -C "$RUNNER_TEMP/export-cache" -czf "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz" .
-          sha256sum "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz" > "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz.sha256"
-          ls -lh "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz"
 
-      - name: Upload Android 34 tools
+          BASE="$GH/caches/modules-2/files-2.1/org.jetbrains.kotlin"
+          test -d "$BASE"
+          for MODPATH in "$BASE"/*; do
+            [ -d "$MODPATH" ] || continue
+            MOD="$(basename "$MODPATH")"
+            for VERPATH in "$MODPATH"/*; do
+              [ -d "$VERPATH" ] || continue
+              VER="$(basename "$VERPATH")"
+              DEST="$OUT/org/jetbrains/kotlin/$MOD/$VER"
+              mkdir -p "$DEST"
+              find "$VERPATH" -type f \( -name '*.pom' -o -name '*.jar' -o -name '*.module' \) -exec cp -f {} "$DEST/" \;
+            done
+          done
+          find "$OUT" -type f -printf '%P %s\n' | sort
+          tar -C "$OUT" -czf "$GITHUB_WORKSPACE/familyguard-kids-kotlin-2.0.21-local-maven.tar.gz" .
+          sha256sum "$GITHUB_WORKSPACE/familyguard-kids-kotlin-2.0.21-local-maven.tar.gz" > "$GITHUB_WORKSPACE/familyguard-kids-kotlin-2.0.21-local-maven.tar.gz.sha256"
+
+      - name: Upload Kotlin local Maven repository
         uses: actions/upload-artifact@v4
         with:
-          name: familyguard-android34-tools
+          name: familyguard-kids-kotlin-2-0-21-local-maven
           path: |
-            familyguard-android34-tools.tar.gz
-            familyguard-android34-tools.tar.gz.sha256
-          compression-level: 0
-          retention-days: 1
-
-      - name: Upload exact error-prone cache
-        uses: actions/upload-artifact@v4
-        with:
-          name: familyguard-errorprone-2-15-0-cache
-          path: |
-            familyguard-errorprone-2.15.0-cache.tar.gz
-            familyguard-errorprone-2.15.0-cache.tar.gz.sha256
+            familyguard-kids-kotlin-2.0.21-local-maven.tar.gz
+            familyguard-kids-kotlin-2.0.21-local-maven.tar.gz.sha256
           compression-level: 0
           retention-days: 1
