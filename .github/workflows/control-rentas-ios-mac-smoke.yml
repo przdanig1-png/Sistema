@@ -88,15 +88,35 @@ jobs:
           PY
           flutter pub get
 
-      - name: Build unsigned iOS release
+      - name: Build iOS simulator release without signing
         shell: bash
         run: |
           set -euxo pipefail
           cd seed
-          flutter build ios --release --no-codesign
-          test -d build/ios/iphoneos/Runner.app
-          plutil -p build/ios/iphoneos/Runner.app/Info.plist | head -80
-          du -sh build/ios/iphoneos/Runner.app
+          flutter build ios --simulator --release
+          test -d build/ios/iphonesimulator/Runner.app
+          plutil -p build/ios/iphonesimulator/Runner.app/Info.plist | head -80
+          du -sh build/ios/iphonesimulator/Runner.app
+
+      - name: Compile iPhoneOS target with code signing disabled
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd seed
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios/manual-device \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            DEVELOPMENT_TEAM='' \
+            build
+          test -d build/ios/manual-device/Build/Products/Release-iphoneos/Runner.app
+          du -sh build/ios/manual-device/Build/Products/Release-iphoneos/Runner.app
 
       - name: Record smoke report
         shell: bash
@@ -108,7 +128,8 @@ jobs:
           Runner: $RUNNER_OS / $RUNNER_ARCH
           Source code included: NO
           Signing material included: NO
-          iOS unsigned release build: PASS
+          iOS simulator release build: PASS
+          iPhoneOS unsigned compile: PASS
           EOF
 
       - name: Upload report only
