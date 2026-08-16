@@ -20,7 +20,6 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER=$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager -perm -111 | head -1)
@@ -36,7 +35,7 @@ jobs:
           test -x "$ANDROID_SDK_ROOT/emulator/emulator"
           test -f "$ANDROID_SDK_ROOT/system-images/android-35/default/x86_64/package.xml"
 
-      - name: Package runtime only
+      - name: Package and split runtime
         shell: bash
         run: |
           set -euxo pipefail
@@ -49,15 +48,43 @@ jobs:
             | zstd -T0 -10 -o "$RUNNER_TEMP/android-qa-sdk-api35-x86_64.tar.zst"
           cd "$RUNNER_TEMP"
           sha256sum android-qa-sdk-api35-x86_64.tar.zst > SHA256SUMS.txt
-          ls -lh android-qa-sdk-api35-x86_64.tar.zst SHA256SUMS.txt
+          split -b 450m -d -a 2 android-qa-sdk-api35-x86_64.tar.zst android-qa-sdk.part-
+          test -f android-qa-sdk.part-00
+          test -f android-qa-sdk.part-01
+          test -f android-qa-sdk.part-02
+          ls -lh android-qa-sdk.part-* SHA256SUMS.txt
 
-      - name: Upload temporary bridge artifact
+      - name: Upload bridge part 00
         uses: actions/upload-artifact@v4
         with:
-          name: android-qa-sdk-api35-x86_64
-          path: |
-            ${{ runner.temp }}/android-qa-sdk-api35-x86_64.tar.zst
-            ${{ runner.temp }}/SHA256SUMS.txt
+          name: android-qa-sdk-part00
+          path: ${{ runner.temp }}/android-qa-sdk.part-00
           compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload bridge part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-qa-sdk-part01
+          path: ${{ runner.temp }}/android-qa-sdk.part-01
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload bridge part 02
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-qa-sdk-part02
+          path: ${{ runner.temp }}/android-qa-sdk.part-02
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload bridge checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-qa-sdk-sha
+          path: ${{ runner.temp }}/SHA256SUMS.txt
           retention-days: 1
           if-no-files-found: error
