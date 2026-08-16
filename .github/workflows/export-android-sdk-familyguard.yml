@@ -1,4 +1,4 @@
-name: Export Android SDK for FamilyGuard local lab
+name: Export FamilyGuard offline build dependencies
 
 on:
   push:
@@ -7,14 +7,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  export-sdk:
+  export-offline-deps:
     runs-on: ubuntu-latest
     steps:
-      - name: Ensure Android SDK 35/36 packages
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Ensure Android SDK 35/36
         shell: bash
         run: |
           set -euo pipefail
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" \
@@ -23,30 +33,126 @@ jobs:
             "build-tools;35.0.0" \
             "build-tools;36.0.0"
 
-      - name: Pack minimal SDK
+      - name: Warm Parent Capacitor 8 dependencies
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p export-sdk
-          cp -a "$ANDROID_SDK_ROOT/cmdline-tools" export-sdk/
-          cp -a "$ANDROID_SDK_ROOT/platform-tools" export-sdk/
-          mkdir -p export-sdk/platforms export-sdk/build-tools export-sdk/licenses
-          cp -a "$ANDROID_SDK_ROOT/platforms/android-35" export-sdk/platforms/
-          cp -a "$ANDROID_SDK_ROOT/platforms/android-36" export-sdk/platforms/
-          cp -a "$ANDROID_SDK_ROOT/build-tools/35.0.0" export-sdk/build-tools/
-          cp -a "$ANDROID_SDK_ROOT/build-tools/36.0.0" export-sdk/build-tools/
-          cp -a "$ANDROID_SDK_ROOT/licenses/." export-sdk/licenses/ || true
-          tar -C export-sdk -czf android-sdk-familyguard-35-36-linux.tar.gz .
-          sha256sum android-sdk-familyguard-35-36-linux.tar.gz > android-sdk-familyguard-35-36-linux.tar.gz.sha256
-          du -sh export-sdk android-sdk-familyguard-35-36-linux.tar.gz
-          cat android-sdk-familyguard-35-36-linux.tar.gz.sha256
+          P=/tmp/fg-parent
+          rm -rf "$P" && mkdir -p "$P" && cd "$P"
+          cat > package.json <<'JSON'
+          {
+            "name":"fg-parent-offline-lab","private":true,"version":"1.0.0",
+            "dependencies":{
+              "@capacitor/android":"8.4.0","@capacitor/app":"8.1.0","@capacitor/camera":"8.2.0","@capacitor/cli":"8.4.0","@capacitor/clipboard":"8.0.1","@capacitor/core":"8.4.0","@capacitor/filesystem":"8.1.2","@capacitor/geolocation":"8.2.0","@capacitor/local-notifications":"8.2.0","@capacitor/push-notifications":"8.1.1","@capacitor/splash-screen":"8.0.1","@capacitor/status-bar":"8.0.2","firebase":"12.14.0","leaflet":"1.9.4","lucide-react":"1.17.0","maplibre-gl":"5.24.0","onesignal-cordova-plugin":"5.3.11","qrcode.react":"4.2.0","react":"19.2.7","react-dom":"19.2.7","react-router-dom":"7.16.0"
+            },
+            "devDependencies":{
+              "@eslint/js":"10.0.1","@tailwindcss/vite":"4.3.0","@types/react":"19.2.16","@types/react-dom":"19.2.3","@vitejs/plugin-react":"6.0.2","eslint":"10.4.1","eslint-plugin-react-hooks":"7.1.1","eslint-plugin-react-refresh":"0.5.2","globals":"17.6.0","tailwindcss":"4.3.0","vite":"8.0.16"
+            }
+          }
+          JSON
+          npm install --no-audit --no-fund
+          mkdir -p dist
+          printf '<!doctype html><html><body>fg</body></html>\n' > dist/index.html
+          cat > capacitor.config.json <<'JSON'
+          {"appId":"com.tecnomedia.fglab.parent","appName":"FG Lab Parent","webDir":"dist"}
+          JSON
+          npx cap add android
+          npx cap sync android
+          cat >> android/app/build.gradle <<'GRADLE'
 
-      - name: Upload SDK artifact
+          repositories { maven { url 'https://jitpack.io' } }
+          dependencies {
+            implementation 'androidx.biometric:biometric:1.1.0'
+            implementation 'io.github.webrtc-sdk:android:144.7559.08'
+            implementation 'com.github.MuntashirAkon:libadb-android:3.1.1'
+            implementation 'com.github.MuntashirAkon:sun-security-android:1.1'
+            implementation 'org.conscrypt:conscrypt-android:2.5.2'
+          }
+          GRADLE
+          ./android/gradlew -p android assembleDebug --no-daemon --stacktrace
+
+      - name: Warm Kids/Chat Capacitor 7 dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=/tmp/fg-legacy
+          rm -rf "$P" && mkdir -p "$P" && cd "$P"
+          cat > package.json <<'JSON'
+          {
+            "name":"fg-legacy-offline-lab","private":true,"version":"1.0.0",
+            "dependencies":{
+              "@capacitor-mlkit/barcode-scanning":"7.5.0","@capacitor/android":"7.6.6","@capacitor/app":"7.1.2","@capacitor/camera":"7.0.5","@capacitor/core":"7.6.6","@capacitor/device":"7.0.5","@capacitor/filesystem":"7.1.8","@capacitor/geolocation":"7.1.8","@capacitor/local-notifications":"7.0.6","@capacitor/push-notifications":"7.0.6","@capacitor/splash-screen":"7.0.5","@capacitor/status-bar":"7.0.6","firebase":"11.10.0","html5-qrcode":"2.3.8","lucide-react":"0.460.0","onesignal-cordova-plugin":"5.3.11","qrcode.react":"4.2.0","react":"19.2.7","react-dom":"19.2.7"
+            },
+            "devDependencies":{
+              "@capacitor/cli":"7.6.6","@tailwindcss/vite":"4.3.0","@vitejs/plugin-react":"4.7.0","tailwindcss":"4.3.0","vite":"6.4.3"
+            }
+          }
+          JSON
+          npm install --no-audit --no-fund
+          mkdir -p dist
+          printf '<!doctype html><html><body>fg</body></html>\n' > dist/index.html
+          cat > capacitor.config.json <<'JSON'
+          {"appId":"com.tecnomedia.fglab.legacy","appName":"FG Lab Legacy","webDir":"dist"}
+          JSON
+          npx cap add android
+          npx cap sync android
+          cat >> android/app/build.gradle <<'GRADLE'
+
+          dependencies {
+            implementation 'io.github.webrtc-sdk:android:125.6422.07'
+            implementation 'com.google.android.gms:play-services-mlkit-face-detection:17.1.0'
+          }
+          GRADLE
+          ./android/gradlew -p android assembleDebug --no-daemon --stacktrace
+
+      - name: Warm TV Capacitor 7.6.7 / OneSignal 5.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=/tmp/fg-tv
+          rm -rf "$P" && mkdir -p "$P" && cd "$P"
+          cat > package.json <<'JSON'
+          {
+            "name":"fg-tv-offline-lab","private":true,"version":"1.0.0",
+            "dependencies":{
+              "@capacitor/android":"7.6.7","@capacitor/app":"7.1.2","@capacitor/core":"7.6.7","@capacitor/splash-screen":"7.0.5","@capacitor/status-bar":"7.0.6","firebase":"11.10.0","lucide-react":"0.460.0","onesignal-cordova-plugin":"5.4.0","react":"19.2.7","react-dom":"19.2.7"
+            },
+            "devDependencies":{
+              "@capacitor/cli":"7.6.7","@tailwindcss/vite":"4.3.1","@vitejs/plugin-react":"4.7.0","tailwindcss":"4.3.1","vite":"6.4.3"
+            }
+          }
+          JSON
+          npm install --no-audit --no-fund
+          mkdir -p dist
+          printf '<!doctype html><html><body>fg</body></html>\n' > dist/index.html
+          cat > capacitor.config.json <<'JSON'
+          {"appId":"com.tecnomedia.fglab.tv","appName":"FG Lab TV","webDir":"dist"}
+          JSON
+          npx cap add android
+          npx cap sync android
+          ./android/gradlew -p android assembleDebug --no-daemon --stacktrace
+
+      - name: Pack offline caches
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p export-deps/gradle/caches export-deps/gradle/wrapper
+          cp -a /tmp/fg-parent/node_modules export-deps/node_modules_parent
+          cp -a /tmp/fg-legacy/node_modules export-deps/node_modules_legacy
+          cp -a /tmp/fg-tv/node_modules export-deps/node_modules_tv
+          cp -a "$HOME/.gradle/caches/modules-2" export-deps/gradle/caches/
+          cp -a "$HOME/.gradle/wrapper/dists" export-deps/gradle/wrapper/
+          tar -C export-deps -czf familyguard-offline-deps-linux.tar.gz .
+          sha256sum familyguard-offline-deps-linux.tar.gz > familyguard-offline-deps-linux.tar.gz.sha256
+          du -sh export-deps familyguard-offline-deps-linux.tar.gz
+          cat familyguard-offline-deps-linux.tar.gz.sha256
+
+      - name: Upload offline dependency artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-sdk-familyguard-35-36-linux
+          name: familyguard-offline-deps-linux
           path: |
-            android-sdk-familyguard-35-36-linux.tar.gz
-            android-sdk-familyguard-35-36-linux.tar.gz.sha256
+            familyguard-offline-deps-linux.tar.gz
+            familyguard-offline-deps-linux.tar.gz.sha256
           compression-level: 0
           retention-days: 1
