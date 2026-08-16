@@ -1,0 +1,8 @@
+name: DevHost Runner Probe
+on: [push]
+jobs:
+  probe:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - run: echo DEVHOST_RUNNER_OK
+        shell: powershell
