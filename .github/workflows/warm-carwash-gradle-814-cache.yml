@@ -27,7 +27,7 @@ jobs:
           unzip -q "$RUNNER_TEMP/gradle-8.14-bin.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/gradle-8.14/bin" >> "$GITHUB_PATH"
 
-      - name: Warm exact plugin family
+      - name: Warm exact plugin markers
         shell: bash
         run: |
           set -euxo pipefail
@@ -59,9 +59,46 @@ jobs:
           cd "$RUNNER_TEMP/seed"
           gradle --version
           gradle tasks --refresh-dependencies --no-daemon
-          test -d "$HOME/.gradle/caches/modules-2/files-2.1/org.gradle.kotlin.kotlin-dsl/org.gradle.kotlin.kotlin-dsl.gradle.plugin/5.2.0"
-          test -d "$HOME/.gradle/caches/modules-2/files-2.1/com.android.tools.build/gradle/8.11.1"
-          test -d "$HOME/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-gradle-plugin/2.2.20"
+
+      - name: Force plugin implementation jars and transitives
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/resolve"
+          cat > "$RUNNER_TEMP/resolve/settings.gradle" <<'GROOVY'
+          pluginManagement {
+              repositories {
+                  gradlePluginPortal()
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'carwash-gradle-resolve'
+          GROOVY
+          cat > "$RUNNER_TEMP/resolve/build.gradle" <<'GROOVY'
+          buildscript {
+              repositories {
+                  gradlePluginPortal()
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'org.gradle.kotlin:gradle-kotlin-dsl-plugins:5.2.0'
+                  classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20'
+                  classpath 'com.android.tools.build:gradle:8.11.1'
+              }
+          }
+          tasks.register('resolveAll') {
+              doLast {
+                  buildscript.configurations.classpath.files.each { println it }
+              }
+          }
+          GROOVY
+          cd "$RUNNER_TEMP/resolve"
+          gradle resolveAll --refresh-dependencies --no-daemon
+          test -n "$(find "$HOME/.gradle/caches/modules-2/files-2.1/org.gradle.kotlin/gradle-kotlin-dsl-plugins/5.2.0" -name '*.jar' -print -quit)"
+          test -n "$(find "$HOME/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-gradle-plugin/2.2.20" -name '*.jar' -print -quit)"
+          test -n "$(find "$HOME/.gradle/caches/modules-2/files-2.1/com.android.tools.build/gradle/8.11.1" -name '*.jar' -print -quit)"
 
       - name: Package Gradle modules cache
         shell: bash
