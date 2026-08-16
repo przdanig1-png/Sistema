@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -25,7 +25,7 @@ jobs:
           channel: stable
           cache: false
 
-      - name: Warm public Flutter and Gradle dependencies
+      - name: Warm exact public Carwash dependencies
         shell: bash
         run: |
           set -euxo pipefail
@@ -41,28 +41,32 @@ jobs:
           dependencies:
             flutter:
               sdk: flutter
-            http: ^1.2.2
-            provider: ^6.1.2
-            path_provider: ^2.1.4
-            url_launcher: ^6.3.0
-            pdf: ^3.11.1
-            printing: ^5.13.4
-            share_plus: ^10.0.2
-            shared_preferences: ^2.3.2
-            device_info_plus: ^10.1.2
-            image_picker: ^1.1.2
-            google_mlkit_text_recognition: ^0.13.0
-            google_mlkit_image_labeling: ^0.11.0
-            image: ^4.2.0
-            mobile_scanner: ^7.1.4
-            qr: ^3.0.2
+            http: 1.6.0
+            provider: 6.1.5+1
+            path_provider: 2.1.5
+            url_launcher: 6.3.2
+            pdf: 3.12.0
+            printing: 5.14.3
+            share_plus: 10.1.4
+            shared_preferences: 2.5.5
+            device_info_plus: 10.1.2
+            image_picker: 1.2.2
+            google_mlkit_text_recognition: 0.13.0
+            google_mlkit_image_labeling: 0.11.1
+            image: 4.8.0
+            mobile_scanner: 7.2.0
+            qr: 3.0.2
           dev_dependencies:
             flutter_test:
               sdk: flutter
-            flutter_lints: ^4.0.0
+            flutter_lints: 4.0.0
           flutter:
             uses-material-design: true
           YAML
+          cat > "$RUNNER_TEMP/dummy/lib/main.dart" <<'DART'
+          import 'package:flutter/material.dart';
+          void main() => runApp(const MaterialApp(home: Scaffold(body: Center(child: Text('toolchain')))));
+          DART
           cd "$RUNNER_TEMP/dummy"
           flutter pub get
           flutter build apk --debug
@@ -91,62 +95,45 @@ jobs:
           tar -C "$STAGE" -cf - . | zstd -T0 -8 -o "$RUNNER_TEMP/flutter-carwash-build-toolchain.tar.zst"
           cd "$RUNNER_TEMP"
           sha256sum flutter-carwash-build-toolchain.tar.zst > flutter-carwash-build-toolchain.sha256
-          split -b 400m -d -a 2 flutter-carwash-build-toolchain.tar.zst flutter-build.part-
+          split -b 350m -d -a 2 flutter-carwash-build-toolchain.tar.zst flutter-build.part-
           ls -lh flutter-build.part-* flutter-carwash-build-toolchain.sha256
 
       - name: Upload part 00
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-part00
-          path: ${{ runner.temp }}/flutter-build.part-00
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-part00, path: '${{ runner.temp }}/flutter-build.part-00', compression-level: 0, retention-days: 1}
       - name: Upload part 01
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-part01
-          path: ${{ runner.temp }}/flutter-build.part-01
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-part01, path: '${{ runner.temp }}/flutter-build.part-01', compression-level: 0, retention-days: 1}
       - name: Upload part 02
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-part02
-          path: ${{ runner.temp }}/flutter-build.part-02
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-part02, path: '${{ runner.temp }}/flutter-build.part-02', compression-level: 0, retention-days: 1}
       - name: Upload part 03
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-part03
-          path: ${{ runner.temp }}/flutter-build.part-03
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-part03, path: '${{ runner.temp }}/flutter-build.part-03', compression-level: 0, retention-days: 1}
       - name: Upload part 04
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-part04
-          path: ${{ runner.temp }}/flutter-build.part-04
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-part04, path: '${{ runner.temp }}/flutter-build.part-04', compression-level: 0, retention-days: 1}
       - name: Upload part 05
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-part05
-          path: ${{ runner.temp }}/flutter-build.part-05
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-part05, path: '${{ runner.temp }}/flutter-build.part-05', compression-level: 0, retention-days: 1}
       - name: Upload part 06
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-part06
-          path: ${{ runner.temp }}/flutter-build.part-06
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-part06, path: '${{ runner.temp }}/flutter-build.part-06', compression-level: 0, retention-days: 1}
+      - name: Upload part 07
+        uses: actions/upload-artifact@v4
+        with: {name: flutter-build-part07, path: '${{ runner.temp }}/flutter-build.part-07', compression-level: 0, retention-days: 1, if-no-files-found: warn}
+      - name: Upload part 08
+        uses: actions/upload-artifact@v4
+        with: {name: flutter-build-part08, path: '${{ runner.temp }}/flutter-build.part-08', compression-level: 0, retention-days: 1, if-no-files-found: warn}
+      - name: Upload part 09
+        uses: actions/upload-artifact@v4
+        with: {name: flutter-build-part09, path: '${{ runner.temp }}/flutter-build.part-09', compression-level: 0, retention-days: 1, if-no-files-found: warn}
+      - name: Upload part 10
+        uses: actions/upload-artifact@v4
+        with: {name: flutter-build-part10, path: '${{ runner.temp }}/flutter-build.part-10', compression-level: 0, retention-days: 1, if-no-files-found: warn}
+      - name: Upload part 11
+        uses: actions/upload-artifact@v4
+        with: {name: flutter-build-part11, path: '${{ runner.temp }}/flutter-build.part-11', compression-level: 0, retention-days: 1, if-no-files-found: warn}
       - name: Upload checksum
         uses: actions/upload-artifact@v4
-        with:
-          name: flutter-build-sha
-          path: ${{ runner.temp }}/flutter-carwash-build-toolchain.sha256
-          compression-level: 0
-          retention-days: 1
+        with: {name: flutter-build-sha, path: '${{ runner.temp }}/flutter-carwash-build-toolchain.sha256', compression-level: 0, retention-days: 1}
