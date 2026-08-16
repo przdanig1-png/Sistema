@@ -1,0 +1,89 @@
+name: Package Generic QA Runtime
+
+on:
+  push:
+    paths:
+      - '.github/workflows/package-carwash-qa-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build Python dependency bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install --upgrade pip
+          mkdir -p "$RUNNER_TEMP/python-site"
+          python -m pip install --target "$RUNNER_TEMP/python-site" \
+            'fastapi==0.115.0' \
+            'uvicorn[standard]==0.30.6' \
+            'python-dotenv==1.0.1' \
+            'psycopg2-binary==2.9.9' \
+            'passlib==1.7.4' \
+            'bcrypt==4.0.1' \
+            'python-jose[cryptography]==3.3.0' \
+            'pydantic==2.9.2' \
+            'python-multipart==0.0.29' \
+            'requests==2.34.2' \
+            'SQLAlchemy==2.0.50' \
+            'Pillow==10.4.0'
+          tar -C "$RUNNER_TEMP/python-site" -cf - . | zstd -T0 -8 -o "$RUNNER_TEMP/carwash-python313-site.tar.zst"
+          sha256sum "$RUNNER_TEMP/carwash-python313-site.tar.zst" > "$RUNNER_TEMP/python.sha256"
+          ls -lh "$RUNNER_TEMP/carwash-python313-site.tar.zst"
+
+      - name: Build PostgreSQL 16 portable bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-16 postgresql-client-16
+          PGROOT=/usr/lib/postgresql/16
+          test -x "$PGROOT/bin/postgres"
+          OUT="$RUNNER_TEMP/postgres16-portable"
+          mkdir -p "$OUT/bin" "$OUT/lib" "$OUT/share"
+          cp -a "$PGROOT/bin/." "$OUT/bin/"
+          cp -a "$PGROOT/lib/." "$OUT/lib/" || true
+          cp -a "$PGROOT/share/." "$OUT/share/" || true
+          # Bundle non-glibc shared-library dependencies so the runtime is self-contained.
+          for exe in "$PGROOT/bin/postgres" "$PGROOT/bin/initdb" "$PGROOT/bin/psql" "$PGROOT/bin/pg_ctl"; do
+            ldd "$exe" | awk '/=> \/|^\// {for(i=1;i<=NF;i++) if($i ~ /^\//) print $i}'
+          done | sort -u > "$RUNNER_TEMP/pg-libs.txt"
+          while read -r lib; do
+            base=$(basename "$lib")
+            case "$base" in libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libresolv.so.*|ld-linux-*.so.*) continue;; esac
+            cp -L "$lib" "$OUT/lib/$base" || true
+          done < "$RUNNER_TEMP/pg-libs.txt"
+          tar -C "$OUT" -cf - . | zstd -T0 -8 -o "$RUNNER_TEMP/postgres16-portable.tar.zst"
+          sha256sum "$RUNNER_TEMP/postgres16-portable.tar.zst" > "$RUNNER_TEMP/postgres.sha256"
+          ls -lh "$RUNNER_TEMP/postgres16-portable.tar.zst"
+
+      - name: Upload Python runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: carwash-python313-runtime
+          path: |
+            ${{ runner.temp }}/carwash-python313-site.tar.zst
+            ${{ runner.temp }}/python.sha256
+          compression-level: 0
+          retention-days: 1
+
+      - name: Upload PostgreSQL runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres16-portable-runtime
+          path: |
+            ${{ runner.temp }}/postgres16-portable.tar.zst
+            ${{ runner.temp }}/postgres.sha256
+          compression-level: 0
+          retention-days: 1
