@@ -1,0 +1,96 @@
+name: Export Control Rentas Local Essentials
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-control-rentas-local-essentials.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Flutter 3.41.9
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.9'
+          channel: stable
+          cache: true
+
+      - name: Ensure Flutter tool dependencies are present
+        shell: bash
+        run: |
+          set -euxo pipefail
+          flutter --version
+          test -f "$FLUTTER_ROOT/packages/flutter_tools/.dart_tool/package_config.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          p=pathlib.Path(os.environ['FLUTTER_ROOT'])/'packages/flutter_tools/.dart_tool/package_config.json'
+          d=json.load(open(p))
+          missing=[]
+          for x in d['packages']:
+              uri=x['rootUri']
+              if uri.startswith('file://'):
+                  q=pathlib.Path(uri[7:])/'pubspec.yaml'
+                  if not q.exists(): missing.append(str(q))
+          if missing:
+              raise SystemExit('Missing flutter_tools packages: '+str(missing[:5]))
+          print('flutter_tools package graph complete:', len(d['packages']))
+          PY
+
+      - name: Package Flutter tool pub cache
+        shell: bash
+        run: |
+          set -euxo pipefail
+          tar --use-compress-program='zstd -T0 -6' -cf "$RUNNER_TEMP/flutter-tool-pub-cache.tar.zst" -C "$HOME" .pub-cache
+          cd "$RUNNER_TEMP"
+          sha256sum flutter-tool-pub-cache.tar.zst > flutter-tool-pub-cache.sha256
+          ls -lh flutter-tool-pub-cache.tar.zst
+
+      - name: Package Java 17 runtime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          JAVA_REAL=$(readlink -f "$JAVA_HOME")
+          JAVA_PARENT=$(dirname "$JAVA_REAL")
+          JAVA_BASE=$(basename "$JAVA_REAL")
+          echo "$JAVA_BASE" > "$RUNNER_TEMP/java17-root.txt"
+          tar --use-compress-program='zstd -T0 -6' -cf "$RUNNER_TEMP/temurin-java17-linux.tar.zst" -C "$JAVA_PARENT" "$JAVA_BASE"
+          cd "$RUNNER_TEMP"
+          sha256sum temurin-java17-linux.tar.zst > temurin-java17-linux.sha256
+          ls -lh temurin-java17-linux.tar.zst
+
+      - name: Upload Flutter tool cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-rentas-flutter-tool-pub-cache
+          path: |
+            ${{ runner.temp }}/flutter-tool-pub-cache.tar.zst
+            ${{ runner.temp }}/flutter-tool-pub-cache.sha256
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload Java 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-rentas-java17
+          path: |
+            ${{ runner.temp }}/temurin-java17-linux.tar.zst
+            ${{ runner.temp }}/temurin-java17-linux.sha256
+            ${{ runner.temp }}/java17-root.txt
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
