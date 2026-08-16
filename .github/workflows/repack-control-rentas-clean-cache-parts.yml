@@ -1,0 +1,82 @@
+name: Repack Control Rentas Clean Cache Parts
+
+on:
+  push:
+    paths:
+      - '.github/workflows/repack-control-rentas-clean-cache-parts.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SOURCE_RUN_ID: '31921480791'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download complete cache artifacts from verified source run
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/repack"
+          for artifact in \
+            control-rentas-complete-clean-00-01 \
+            control-rentas-complete-clean-02-03 \
+            control-rentas-complete-clean-04-05 \
+            control-rentas-complete-clean-06-07 \
+            control-rentas-complete-clean-meta
+          do
+            gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir "$RUNNER_TEMP/repack"
+          done
+          cd "$RUNNER_TEMP/repack"
+          test -f clean-caches-SHA256SUMS.txt
+          for n in 00 01 02 03 04 05 06 07; do test -f "clean-caches.part-$n"; done
+          ls -lh clean-caches.part-* clean-caches-SHA256SUMS.txt
+
+      - name: Verify reconstructed cache before repacking
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP/repack"
+          cat clean-caches.part-00 clean-caches.part-01 clean-caches.part-02 clean-caches.part-03 clean-caches.part-04 clean-caches.part-05 clean-caches.part-06 clean-caches.part-07 > control-rentas-v419-clean-caches.tar.zst
+          sha256sum -c clean-caches-SHA256SUMS.txt
+          rm control-rentas-v419-clean-caches.tar.zst
+
+      - name: Upload metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-rentas-clean-repack-meta
+          path: ${{ runner.temp }}/repack/clean-caches-SHA256SUMS.txt
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload part 00
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part00, path: '${{ runner.temp }}/repack/clean-caches.part-00', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload part 01
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part01, path: '${{ runner.temp }}/repack/clean-caches.part-01', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload part 02
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part02, path: '${{ runner.temp }}/repack/clean-caches.part-02', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload part 03
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part03, path: '${{ runner.temp }}/repack/clean-caches.part-03', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload part 04
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part04, path: '${{ runner.temp }}/repack/clean-caches.part-04', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload part 05
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part05, path: '${{ runner.temp }}/repack/clean-caches.part-05', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload part 06
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part06, path: '${{ runner.temp }}/repack/clean-caches.part-06', compression-level: 0, retention-days: 1, if-no-files-found: error}
+      - name: Upload part 07
+        uses: actions/upload-artifact@v4
+        with: {name: control-rentas-clean-repack-part07, path: '${{ runner.temp }}/repack/clean-caches.part-07', compression-level: 0, retention-days: 1, if-no-files-found: error}
