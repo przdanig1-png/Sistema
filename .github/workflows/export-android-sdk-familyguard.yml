@@ -1,4 +1,4 @@
-name: Prepare FamilyGuard local emulator and missing cache
+name: Export FamilyGuard Android 34 tools and exact offline cache
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  prepare-local-lab:
+  export-missing-local-lab-bits:
     runs-on: ubuntu-latest
     steps:
       - name: Java 21
@@ -16,121 +16,64 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install emulator and Android 35 Google APIs image
+      - name: Install Android 34 platform and build tools
         shell: bash
         run: |
           set -euo pipefail
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "emulator" \
-            "system-images;android-35;google_apis;x86_64"
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+          mkdir -p sdk34/platforms sdk34/build-tools
+          cp -a "$ANDROID_SDK_ROOT/platforms/android-34" sdk34/platforms/
+          cp -a "$ANDROID_SDK_ROOT/build-tools/34.0.0" sdk34/build-tools/
+          tar -C sdk34 -czf familyguard-android34-tools.tar.gz .
+          sha256sum familyguard-android34-tools.tar.gz > familyguard-android34-tools.tar.gz.sha256
+          ls -lh familyguard-android34-tools.tar.gz
 
-      - name: Warm exact AndroidX core 1.13.1 cache in isolated Gradle home
+      - name: Warm exact error-prone annotations 2.15.0 cache
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/fg-core-warm"
-          GH="$RUNNER_TEMP/fg-core-gradle-home"
+          WORK="$RUNNER_TEMP/fg-errorprone-warm"
+          GH="$RUNNER_TEMP/fg-errorprone-gradle-home"
           rm -rf "$WORK" "$GH"
           mkdir -p "$WORK" "$GH"
           cd "$WORK"
-          curl -fsSL -o gradle.zip https://services.gradle.org/distributions/gradle-8.14.3-bin.zip
-          unzip -q gradle.zip
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name='fg-core-warm'
+          rootProject.name='fg-errorprone-warm'
           EOF
           cat > build.gradle <<'EOF'
           plugins { id 'base' }
           configurations { warm }
-          dependencies {
-            warm 'androidx.core:core:1.13.1'
-            warm 'androidx.core:core-ktx:1.13.1'
-          }
-          tasks.register('warmDependencies') {
-            doLast { configurations.warm.files.each { println it } }
-          }
+          dependencies { warm 'com.google.errorprone:error_prone_annotations:2.15.0' }
+          tasks.register('warmDependencies') { doLast { configurations.warm.files.each { println it } } }
           EOF
-          GRADLE_USER_HOME="$GH" ./gradle-8.14.3/bin/gradle warmDependencies --no-daemon --stacktrace
-          mkdir -p "$RUNNER_TEMP/export-core"
-          cp -a "$GH/caches/modules-2" "$RUNNER_TEMP/export-core/"
-          tar -C "$RUNNER_TEMP/export-core" -czf "$GITHUB_WORKSPACE/familyguard-gradle-core-1.13.1-cache.tar.gz" .
-          sha256sum "$GITHUB_WORKSPACE/familyguard-gradle-core-1.13.1-cache.tar.gz" > "$GITHUB_WORKSPACE/familyguard-gradle-core-1.13.1-cache.tar.gz.sha256"
-          ls -lh "$GITHUB_WORKSPACE/familyguard-gradle-core-1.13.1-cache.tar.gz"
+          GRADLE_USER_HOME="$GH" gradle warmDependencies --no-daemon --stacktrace
+          mkdir -p "$RUNNER_TEMP/export-cache"
+          cp -a "$GH/caches/modules-2" "$RUNNER_TEMP/export-cache/"
+          tar -C "$RUNNER_TEMP/export-cache" -czf "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz" .
+          sha256sum "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz" > "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz.sha256"
+          ls -lh "$GITHUB_WORKSPACE/familyguard-errorprone-2.15.0-cache.tar.gz"
 
-      - name: Pack emulator plus system image
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p export-emulator/system-images/android-35/google_apis
-          cp -a "$ANDROID_SDK_ROOT/emulator" export-emulator/
-          cp -a "$ANDROID_SDK_ROOT/system-images/android-35/google_apis/x86_64" export-emulator/system-images/android-35/google_apis/
-          tar -C export-emulator -czf familyguard-emulator-api35-googleapis-x86_64.tar.gz .
-          sha256sum familyguard-emulator-api35-googleapis-x86_64.tar.gz > familyguard-emulator-api35-googleapis-x86_64.tar.gz.sha256
-          split -b 250M -d -a 2 familyguard-emulator-api35-googleapis-x86_64.tar.gz emulator.part-
-          ls -lh familyguard-emulator-api35-googleapis-x86_64.tar.gz emulator.part-*
-          cat familyguard-emulator-api35-googleapis-x86_64.tar.gz.sha256
-
-      - name: Upload core cache
+      - name: Upload Android 34 tools
         uses: actions/upload-artifact@v4
         with:
-          name: familyguard-gradle-core-1-13-1-cache
+          name: familyguard-android34-tools
           path: |
-            familyguard-gradle-core-1.13.1-cache.tar.gz
-            familyguard-gradle-core-1.13.1-cache.tar.gz.sha256
+            familyguard-android34-tools.tar.gz
+            familyguard-android34-tools.tar.gz.sha256
           compression-level: 0
           retention-days: 1
 
-      - name: Upload emulator checksum
+      - name: Upload exact error-prone cache
         uses: actions/upload-artifact@v4
         with:
-          name: familyguard-emulator-checksum
-          path: familyguard-emulator-api35-googleapis-x86_64.tar.gz.sha256
-          compression-level: 0
-          retention-days: 1
-
-      - name: Upload emulator part 00
-        uses: actions/upload-artifact@v4
-        with: { name: familyguard-emulator-part-00, path: emulator.part-00, compression-level: 0, retention-days: 1 }
-      - name: Upload emulator part 01
-        uses: actions/upload-artifact@v4
-        with: { name: familyguard-emulator-part-01, path: emulator.part-01, compression-level: 0, retention-days: 1 }
-      - name: Upload emulator part 02
-        uses: actions/upload-artifact@v4
-        with: { name: familyguard-emulator-part-02, path: emulator.part-02, compression-level: 0, retention-days: 1 }
-      - name: Upload emulator part 03
-        uses: actions/upload-artifact@v4
-        with: { name: familyguard-emulator-part-03, path: emulator.part-03, compression-level: 0, retention-days: 1 }
-      - name: Upload emulator part 04
-        uses: actions/upload-artifact@v4
-        with:
-          name: familyguard-emulator-part-04
-          path: emulator.part-04
-          if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 1
-      - name: Upload emulator part 05
-        uses: actions/upload-artifact@v4
-        with:
-          name: familyguard-emulator-part-05
-          path: emulator.part-05
-          if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 1
-      - name: Upload emulator part 06
-        uses: actions/upload-artifact@v4
-        with:
-          name: familyguard-emulator-part-06
-          path: emulator.part-06
-          if-no-files-found: ignore
-          compression-level: 0
-          retention-days: 1
-      - name: Upload emulator part 07
-        uses: actions/upload-artifact@v4
-        with:
-          name: familyguard-emulator-part-07
-          path: emulator.part-07
-          if-no-files-found: ignore
+          name: familyguard-errorprone-2-15-0-cache
+          path: |
+            familyguard-errorprone-2.15.0-cache.tar.gz
+            familyguard-errorprone-2.15.0-cache.tar.gz.sha256
           compression-level: 0
           retention-days: 1
