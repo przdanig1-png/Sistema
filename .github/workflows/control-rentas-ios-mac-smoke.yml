@@ -88,21 +88,22 @@ jobs:
           PY
           flutter pub get
 
-      - name: Build iOS simulator release without signing
+      - name: Build iOS simulator debug without signing
         shell: bash
         run: |
           set -euxo pipefail
           cd seed
-          flutter build ios --simulator --release
+          flutter build ios --simulator --debug
           test -d build/ios/iphonesimulator/Runner.app
           plutil -p build/ios/iphonesimulator/Runner.app/Info.plist | head -80
           du -sh build/ios/iphonesimulator/Runner.app
 
-      - name: Compile iPhoneOS target with code signing disabled
+      - name: Compile Release iPhoneOS target with code signing disabled
         shell: bash
         run: |
           set -euxo pipefail
           cd seed
+          flutter build ios --config-only --release --no-codesign
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
             -scheme Runner \
@@ -128,8 +129,8 @@ jobs:
           Runner: $RUNNER_OS / $RUNNER_ARCH
           Source code included: NO
           Signing material included: NO
-          iOS simulator release build: PASS
-          iPhoneOS unsigned compile: PASS
+          iOS simulator debug build: PASS
+          iPhoneOS unsigned Release compile: PASS
           EOF
 
       - name: Upload report only
