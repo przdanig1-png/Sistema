@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -37,12 +37,22 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'cmdline-tools;latest'
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          test -d "$SDK_ROOT"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager -perm -111 | head -1)
+          fi
+          test -n "$SDKMANAGER"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'cmdline-tools;latest'
           flutter precache --android
           flutter --version
           java -version
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          test -d "$SDK_ROOT/platforms/android-36"
+          test -d "$SDK_ROOT/build-tools/36.0.0"
 
       - name: Warm Control Rentas v419 dependencies
         shell: bash
@@ -107,6 +117,7 @@ jobs:
             flutter-root.txt
           compression-level: 0
           retention-days: 1
+          if-no-files-found: error
 
       - name: Upload Android SDK
         uses: actions/upload-artifact@v4
@@ -117,6 +128,7 @@ jobs:
             android-sdk-api36-min.tar.zst.sha256
           compression-level: 0
           retention-days: 1
+          if-no-files-found: error
 
       - name: Upload offline caches
         uses: actions/upload-artifact@v4
@@ -127,3 +139,4 @@ jobs:
             control-rentas-v419-offline-caches.tar.zst.sha256
           compression-level: 0
           retention-days: 1
+          if-no-files-found: error
