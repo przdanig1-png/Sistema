@@ -60,8 +60,6 @@ jobs:
           flutter build apk --debug
           ./android/gradlew -p android help --no-daemon
           test -d "$HOME/.gradle/caches/modules-2"
-          find "$HOME/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin" -maxdepth 4 -type f | head -50
-          find "$HOME/.gradle/caches/modules-2/files-2.1/com.android.tools.build" -maxdepth 4 -type f | head -50
 
       - name: Package complete Gradle modules cache
         shell: bash
