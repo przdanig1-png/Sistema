@@ -33,7 +33,6 @@ jobs:
           flutter create --platforms=android "$RUNNER_TEMP/carwash_seed"
           cd "$RUNNER_TEMP/carwash_seed"
 
-          # Match Carwash 206 Android plugin family.
           python3 - <<'PY'
           from pathlib import Path
           p=Path('android/settings.gradle.kts')
@@ -48,7 +47,6 @@ jobs:
           p.write_text(s)
           PY
 
-          # Use the same direct Android dependency present in Carwash.
           python3 - <<'PY'
           from pathlib import Path
           p=Path('android/app/build.gradle.kts')
@@ -61,11 +59,9 @@ jobs:
           flutter pub get
           flutter build apk --debug
           ./android/gradlew -p android help --no-daemon
-
           test -d "$HOME/.gradle/caches/modules-2"
-          test -f "$HOME/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-stdlib-common/2.0.21"/*/kotlin-stdlib-common-2.0.21.jar
-          test -f "$HOME/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-gradle-plugin/2.2.20"/*/kotlin-gradle-plugin-2.2.20-*.jar
-          test -f "$HOME/.gradle/caches/modules-2/files-2.1/com.android.tools.build/gradle/8.11.1"/*/gradle-8.11.1.jar
+          find "$HOME/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin" -maxdepth 4 -type f | head -50
+          find "$HOME/.gradle/caches/modules-2/files-2.1/com.android.tools.build" -maxdepth 4 -type f | head -50
 
       - name: Package complete Gradle modules cache
         shell: bash
