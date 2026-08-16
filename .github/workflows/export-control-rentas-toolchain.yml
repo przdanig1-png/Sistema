@@ -51,21 +51,74 @@ jobs:
           test -d "$SDK_ROOT/platforms/android-36"
           test -d "$SDK_ROOT/build-tools/36.0.0"
 
-      - name: Warm Control Rentas v419 dependencies
+      - name: Warm exact Control Rentas dependency graph
         shell: bash
         run: |
           set -euxo pipefail
-          curl -L --fail --retry 5 --retry-delay 3 'https://drive.google.com/uc?export=download&id=1pGHsIgkV6-HO64abtrxdxqsX8E57yKEt' -o source419.zip
-          echo 'daff31a8e3312b90a36c91bfbda295d750483fd81b41326e437d47f8648451a7  source419.zip' | sha256sum -c -
-          mkdir src
-          unzip -q source419.zip -d src
-          grep -F 'version: 0.5.110+419' src/pubspec.yaml
-          cd src
+          flutter create --platforms=android --org com.example seed
+          cd seed
+          cat > pubspec.yaml <<'PUBSPEC'
+          name: control_rentas_seed
+          description: Offline dependency seed for Control Rentas v419
+          publish_to: 'none'
+          version: 0.5.110+419
+          environment:
+            sdk: '>=3.3.0 <4.0.0'
+          dependencies:
+            flutter:
+              sdk: flutter
+            cupertino_icons: ^1.0.8
+            shared_preferences: ^2.2.3
+            intl: ^0.19.0
+            image_picker: ^1.1.2
+            image: ^4.8.0
+            share_plus: ^10.1.4
+            path_provider: ^2.1.4
+            pdf: ^3.11.1
+            url_launcher: ^6.3.0
+            file_picker: ^8.0.7
+            archive: ^4.0.9
+            local_auth: ^2.3.0
+            firebase_core: ^3.6.0
+            firebase_messaging: ^15.1.3
+            cloud_firestore: ^5.6.12
+            flutter_local_notifications: ^17.2.3
+            timezone: ^0.9.4
+            permission_handler: ^11.3.1
+            audioplayers: ^6.1.0
+            workmanager: 0.9.0+3
+          dev_dependencies:
+            flutter_lints: ^5.0.0
+          flutter:
+            uses-material-design: true
+          PUBSPEC
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('android/settings.gradle.kts')
+          t=s.read_text()
+          t=re.sub(r'id\("com\.android\.application"\) version "[^"]+" apply false', 'id("com.android.application") version "8.11.1" apply false', t)
+          t=re.sub(r'id\("org\.jetbrains\.kotlin\.android"\) version "[^"]+" apply false', 'id("org.jetbrains.kotlin.android") version "2.2.20" apply false', t)
+          if 'com.google.gms.google-services' not in t:
+              t=t.replace('plugins {', 'plugins {\n    id("com.google.gms.google-services") version "4.4.3" apply false', 1)
+          s.write_text(t)
+          w=Path('android/gradle/wrapper/gradle-wrapper.properties')
+          wt=w.read_text()
+          wt=re.sub(r'gradle-[^/]+-(?:all|bin)\.zip', 'gradle-8.14-all.zip', wt)
+          w.write_text(wt)
+          a=Path('android/app/build.gradle.kts')
+          at=a.read_text()
+          at=at.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
+          at=at.replace('targetSdk = flutter.targetSdkVersion', 'targetSdk = 36')
+          at += '''\n\ndependencies {\n    implementation(platform("com.google.firebase:firebase-bom:33.16.0"))\n    implementation("com.google.firebase:firebase-messaging")\n    implementation("androidx.core:core:1.15.0")\n    implementation("androidx.core:core-ktx:1.15.0")\n    implementation("androidx.activity:activity:1.10.1")\n    implementation("androidx.activity:activity-ktx:1.10.1")\n    implementation("androidx.browser:browser:1.8.0")\n    implementation("androidx.navigationevent:navigationevent-android:1.0.0")\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'''
+          at=at.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true')
+          a.write_text(at)
+          PY
           flutter pub get
-          flutter analyze --no-fatal-infos --no-fatal-warnings
           flutter build apk --debug
+          test -f build/app/outputs/flutter-apk/app-debug.apk
+          ./android/gradlew -p android --version | grep -F 'Gradle 8.14'
           cd ..
-          test -f src/build/app/outputs/flutter-apk/app-debug.apk
 
       - name: Package and split Flutter SDK
         shell: bash
@@ -118,7 +171,6 @@ jobs:
             ${{ runner.temp }}/flutter-root.txt
           retention-days: 1
           if-no-files-found: error
-
       - name: Upload Flutter part 00
         uses: actions/upload-artifact@v4
         with: {name: control-rentas-flutter-part00, path: '${{ runner.temp }}/flutter-sdk.part-00', compression-level: 0, retention-days: 1, if-no-files-found: error}
