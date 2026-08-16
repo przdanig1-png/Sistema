@@ -1,0 +1,52 @@
+name: Export Android SDK for FamilyGuard local lab
+
+on:
+  push:
+    branches:
+      - temp-android-sdk-bootstrap-20260815
+  workflow_dispatch:
+
+jobs:
+  export-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure Android SDK 35/36 packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "platforms;android-36" \
+            "build-tools;35.0.0" \
+            "build-tools;36.0.0"
+
+      - name: Pack minimal SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p export-sdk
+          cp -a "$ANDROID_SDK_ROOT/cmdline-tools" export-sdk/
+          cp -a "$ANDROID_SDK_ROOT/platform-tools" export-sdk/
+          mkdir -p export-sdk/platforms export-sdk/build-tools export-sdk/licenses
+          cp -a "$ANDROID_SDK_ROOT/platforms/android-35" export-sdk/platforms/
+          cp -a "$ANDROID_SDK_ROOT/platforms/android-36" export-sdk/platforms/
+          cp -a "$ANDROID_SDK_ROOT/build-tools/35.0.0" export-sdk/build-tools/
+          cp -a "$ANDROID_SDK_ROOT/build-tools/36.0.0" export-sdk/build-tools/
+          cp -a "$ANDROID_SDK_ROOT/licenses/." export-sdk/licenses/ || true
+          tar -C export-sdk -czf android-sdk-familyguard-35-36-linux.tar.gz .
+          sha256sum android-sdk-familyguard-35-36-linux.tar.gz > android-sdk-familyguard-35-36-linux.tar.gz.sha256
+          du -sh export-sdk android-sdk-familyguard-35-36-linux.tar.gz
+          cat android-sdk-familyguard-35-36-linux.tar.gz.sha256
+
+      - name: Upload SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-sdk-familyguard-35-36-linux
+          path: |
+            android-sdk-familyguard-35-36-linux.tar.gz
+            android-sdk-familyguard-35-36-linux.tar.gz.sha256
+          compression-level: 0
+          retention-days: 1
