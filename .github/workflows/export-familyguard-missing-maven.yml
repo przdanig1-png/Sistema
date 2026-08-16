@@ -51,13 +51,14 @@ jobs:
             warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.0.21'
             warm 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.0.21'
             warm 'org.jetbrains.kotlin:kotlin-reflect:2.0.21'
+            warm 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.0.21'
           }
           tasks.register('warmDependencies') { doLast { configurations.warm.files.each { println it } } }
           EOF
           GRADLE_USER_HOME="$GH" gradle warmDependencies --no-daemon --stacktrace
 
           BASE="$GH/caches/modules-2/files-2.1"
-          for GROUP in androidx.core com.google.mlkit com.google.errorprone org.jetbrains.kotlin; do
+          for GROUP in androidx.core com.google.mlkit com.google.errorprone org.jetbrains.kotlin org.jetbrains.intellij.deps org.jetbrains; do
             GPATH="${GROUP//./\/}"
             SRC="$BASE/$GROUP"
             [ -d "$SRC" ] || continue
