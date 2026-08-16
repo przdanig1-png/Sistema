@@ -1,0 +1,32 @@
+name: Package Gradle 8.14
+
+on:
+  push:
+    paths:
+      - '.github/workflows/package-gradle-814.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download and verify Gradle 8.14
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -fL --retry 4 https://services.gradle.org/distributions/gradle-8.14-all.zip -o "$RUNNER_TEMP/gradle-8.14-all.zip"
+          unzip -tq "$RUNNER_TEMP/gradle-8.14-all.zip"
+          sha256sum "$RUNNER_TEMP/gradle-8.14-all.zip" > "$RUNNER_TEMP/gradle-8.14-all.sha256"
+          ls -lh "$RUNNER_TEMP/gradle-8.14-all.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gradle-8.14-all
+          path: |
+            ${{ runner.temp }}/gradle-8.14-all.zip
+            ${{ runner.temp }}/gradle-8.14-all.sha256
+          compression-level: 0
+          retention-days: 1
