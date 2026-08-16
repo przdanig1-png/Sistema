@@ -1,4 +1,4 @@
-name: Export FamilyGuard Kids ML Kit AARs
+name: Export FamilyGuard Kids Kotlin compiler Maven repo
 
 on:
   push:
@@ -7,37 +7,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  export-kids-mlkit:
+  export-kotlin-compiler:
     runs-on: ubuntu-latest
     steps:
-      - name: Build exact local Maven layout
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Resolve Kotlin compiler embeddable with all transitives
         shell: bash
         run: |
           set -euo pipefail
-          OUT="$GITHUB_WORKSPACE/mlkit-maven"
-          mkdir -p "$OUT"
-          fetch_coord() {
-            local group="$1" artifact="$2" version="$3" ext="$4"
-            local gp="${group//./\/}"
-            local dir="$OUT/$gp/$artifact/$version"
-            local base="https://dl.google.com/dl/android/maven2/$gp/$artifact/$version"
-            mkdir -p "$dir"
-            curl -fL --retry 4 --retry-all-errors -o "$dir/$artifact-$version.pom" "$base/$artifact-$version.pom"
-            curl -fL --retry 4 --retry-all-errors -o "$dir/$artifact-$version.$ext" "$base/$artifact-$version.$ext"
-          }
-          fetch_coord com.google.mlkit common 18.5.0 aar
-          fetch_coord com.google.mlkit vision-common 17.2.0 aar
-          fetch_coord com.google.mlkit vision-interfaces 16.1.0 aar
-          find "$OUT" -type f -printf '%P %s\n' | sort
-          tar -C "$OUT" -czf familyguard-kids-mlkit-local-maven.tar.gz .
-          sha256sum familyguard-kids-mlkit-local-maven.tar.gz > familyguard-kids-mlkit-local-maven.tar.gz.sha256
+          OUT="$GITHUB_WORKSPACE/compiler-maven"
+          rm -rf "$OUT"; mkdir -p "$OUT"
+          mvn -q -Dmaven.repo.local="$OUT" org.apache.maven.plugins:maven-dependency-plugin:3.8.1:get \
+            -Dartifact=org.jetbrains.kotlin:kotlin-compiler-embeddable:2.0.21 \
+            -Dtransitive=true
+          test -f "$OUT/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.0.21/kotlin-compiler-embeddable-2.0.21.jar"
+          find "$OUT" -type f \( -name '*.jar' -o -name '*.pom' -o -name '*.module' \) -printf '%P %s\n' | sort > compiler-maven-files.txt
+          tar -C "$OUT" -czf familyguard-kids-kotlin-compiler-2.0.21-maven.tar.gz .
+          sha256sum familyguard-kids-kotlin-compiler-2.0.21-maven.tar.gz > familyguard-kids-kotlin-compiler-2.0.21-maven.tar.gz.sha256
+          du -sh "$OUT" familyguard-kids-kotlin-compiler-2.0.21-maven.tar.gz
 
-      - name: Upload ML Kit local Maven repository
+      - name: Upload Kotlin compiler Maven repository
         uses: actions/upload-artifact@v4
         with:
-          name: familyguard-kids-mlkit-local-maven
+          name: familyguard-kids-kotlin-compiler-2-0-21-maven
           path: |
-            familyguard-kids-mlkit-local-maven.tar.gz
-            familyguard-kids-mlkit-local-maven.tar.gz.sha256
+            familyguard-kids-kotlin-compiler-2.0.21-maven.tar.gz
+            familyguard-kids-kotlin-compiler-2.0.21-maven.tar.gz.sha256
+            compiler-maven-files.txt
           compression-level: 0
           retention-days: 1
