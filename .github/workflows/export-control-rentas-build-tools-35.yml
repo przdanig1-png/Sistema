@@ -1,0 +1,41 @@
+name: Export Control Rentas Build Tools 35
+
+on:
+  push:
+    paths:
+      - '.github/workflows/export-control-rentas-build-tools-35.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Build Tools 35.0.0
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" 'build-tools;35.0.0'
+          test -x "$SDK_ROOT/build-tools/35.0.0/aapt2"
+          tar --use-compress-program='zstd -T0 -6' -cf "$RUNNER_TEMP/android-build-tools-35.0.0.tar.zst" -C "$SDK_ROOT/build-tools" 35.0.0
+          cd "$RUNNER_TEMP"
+          sha256sum android-build-tools-35.0.0.tar.zst > android-build-tools-35.0.0-SHA256SUMS.txt
+          ls -lh android-build-tools-35.0.0.tar.zst android-build-tools-35.0.0-SHA256SUMS.txt
+      - name: Upload Build Tools 35
+        uses: actions/upload-artifact@v4
+        with:
+          name: control-rentas-build-tools-35
+          path: |
+            ${{ runner.temp }}/android-build-tools-35.0.0.tar.zst
+            ${{ runner.temp }}/android-build-tools-35.0.0-SHA256SUMS.txt
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
